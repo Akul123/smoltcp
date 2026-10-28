@@ -2532,6 +2532,33 @@ mod tests {
         assert!(OptionRepr::parse(&packet).is_err());
     }
 
+    // Route Information: Prefix Length vs. actual prefix octets present.
+    #[test]
+    fn route_information_prefix_length_must_match_body() {
+        // (prefix_length, prefix octets present, should be accepted)
+        let cases = [
+            (0u8, 0usize, true),
+            (1, 1, true),     // ok
+            (9, 2, true),     // rounds up to 2 octets
+            (64, 8, true),    // ok
+            (128, 16, true),  // ok
+            (64, 9, false),   // body longer than declared
+            (64, 7, false),   // body shorter than declared
+            (129, 17, false), // over 128 bits, even though body matches
+        ];
+        for (plen, n, ok) in cases {
+            // 2->type and length bytes, 6->route information fixed body bytes,
+            // 17->enough space for largest number of bytes in cases
+            let mut data = [0u8; 2 + 6 + 17];
+            // create data for the Route information option
+            data[0] = 0x03;
+            data[1] = (6 + n) as u8;
+            data[2] = plen;
+            let packet = OptionPacket::new_unchecked(&data[..2 + 6 + n]);
+            assert_eq!(packet.check_len().is_ok(), ok, "plen={plen} n={n}");
+        }
+    }
+
     // This test checks that all supported RPL option types are rejected
     // if the option body is truncated. Also checks that the full option
     // body is accepted.
